@@ -1,0 +1,10 @@
+/DotNetSources/LibMeteoPL.sln.ide
+/DotNetSources/LibMeteoPLDotNet/obj
+/DotNetSources/LibMeteoPLDotNet/bin
+/DotNetSources/LibMeteoPLDotNetSample/obj
+/DotNetSources/LibMeteoPLDotNetSample/bin
+/DotNetSources/LibMeteoPLTranslator/obj
+/DotNetSources/LibMeteoPLTranslator/bin
+*.suo
+/DotNetSources/packages
+/JavaDerivative/LibMeteoPLJavaSample/out
