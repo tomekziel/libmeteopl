@@ -32,14 +32,20 @@ namespace LibMeteoPL
         const int TIMESTAMP_TIME_ROW = 607;
         const int CHART_START_COL = 64;
         const int CHART_WIDTH = 412;
+        const int PEAKS_NUMBER = 72; // to be checked
 
         const int TEMPERATURE_ROW_START = 58;
         const int TEMPERATURE_ROW_END = 133;
         const int TEMPERATURE_TEXT_COL = 39;
-        const int TEMPERATURE_PANEL_HEIGHT = 76;
+        const int TEMPERATURE_PANEL_HEIGHT = TEMPERATURE_ROW_END- TEMPERATURE_ROW_START+1;
+
+        const int PRESSURE_TEXT_COL = 33;
+        const int PRESSURE_ROW_START = 230;
+        const int PRESSURE_ROW_END = 305;
+        const int PRESSURE_PANEL_HEIGHT = PRESSURE_ROW_END - PRESSURE_ROW_START + 1;
 
         // color definitons
-        const int BLACK = 0x000000;
+        const int COLOR_BLACK = 0x000000;
         const int COLOR_TEMPERATURE_RED = 0xff0000;
         const int COLOR_TEMPERATURE_MINMAX_RED1 = 0xf5d2d2;
         const int COLOR_TEMPERATURE_MINMAX_RED2 = 0xfadcdc;
@@ -55,15 +61,63 @@ namespace LibMeteoPL
         // parsed data
         long timestamp = 0;
 
-        // image section 1 - temperatures
+
+
+        // consider changing to ENUM, if all target languages support it
+        // Section 1 - temperatures
+        public const int TYPE_TEMPERATURE = 0;
+        public const int TYPE_TEMPERATURE_MIN = 1;
+        public const int TYPE_TEMPERATURE_MAX = 2;
+        public const int TYPE_TEMPERATURE_PERCEPTIBLE = 3;
+        public const int TYPE_TEMPERATURE_PERCEPTIBLE_MIN = 4;
+        public const int TYPE_TEMPERATURE_PERCEPTIBLE_MAX = 5;
+        public const int TYPE_SURFACE_TEMPERATURE_MIN = 6;
+        public const int TYPE_SURFACE_TEMPERATURE_MAX = 7;
+        public const int TYPE_DEWPOINT_TEMPERATURE = 8;
+        // Section 2 - precipitation
+        public const int TYPE_HUMIDITY = 9;
+        public const int TYPE_RAIN_AVERAGE = 10;
+        public const int TYPE_RAIN_MAX = 11;
+        public const int TYPE_SNOW_AVERAGE = 12;
+        public const int TYPE_SNOW_MAX = 13;
+        public const int TYPE_PRECIPITIATION_ABOVE_SCALE = 14;
+        public const int TYPE_CONVECTIVE_PRECIPITIATION = 15;
+        // Section 3 - atmospheric pressure
+        public const int TYPE_PRESSURE_HPA = 16;
+        public const int TYPE_PRESSURE_MMHG = 17;
+        // Other sections - TBD
+
+
+        // Section 1 - temperatures
         double[] temperature = new double[CHART_WIDTH];
-        double[] temperatureMax = new double[CHART_WIDTH];
         double[] temperatureMin = new double[CHART_WIDTH];
+        double[] temperatureMax = new double[CHART_WIDTH];
         double[] temperaturePerc = new double[CHART_WIDTH];
-        double[] temperaturePercMax = new double[CHART_WIDTH];
         double[] temperaturePercMin = new double[CHART_WIDTH];
+        double[] temperaturePercMax = new double[CHART_WIDTH];
+        double[] temperatureSurfaceMin = new double[PEAKS_NUMBER];
+        double[] temperatureSurfaceMax = new double[PEAKS_NUMBER];
+        double[] temperatureDevPoint = new double[PEAKS_NUMBER];
         double temperature_precision;
         double temperature_row0;
+
+        // Section 2 - precipitation
+        double[] humidity = new double[CHART_WIDTH];
+        double[] rainAvg = new double[PEAKS_NUMBER];
+        double[] rainMax = new double[PEAKS_NUMBER];
+        double[] snowAvg = new double[PEAKS_NUMBER];
+        double[] snowMax = new double[PEAKS_NUMBER];
+        bool[] percAboveScale = new bool[PEAKS_NUMBER];
+        bool[] convectivePerc = new bool[PEAKS_NUMBER];
+
+        // Section 3 - atmospheric pressure
+        double[] pressurehPa = new double[CHART_WIDTH];
+        double[] pressuremmHg = new double[CHART_WIDTH];
+        double pressure_row0_hPa;
+        double pressure_precision_hPa;
+
+        // Other sections - TBD
+
 
 
         // create object and parse img
@@ -87,13 +141,7 @@ namespace LibMeteoPL
 
         }
 
-        // consider changing to ENUM, if all target languages support it
-        public const int TYPE_TEMPERATURE = 0;
-        public const int TYPE_TEMPERATURE_MAX = 1;
-        public const int TYPE_TEMPERATURE_MIN = 2;
-        public const int TYPE_TEMPERATURE_PERCEPTIBLE = 3;
-        public const int TYPE_TEMPERATURE_PERCEPTIBLE_MAX = 4;
-        public const int TYPE_TEMPERATURE_PERCEPTIBLE_MIN = 5;
+
 
         /*
         how many samples (data points) are present in given category
@@ -108,11 +156,13 @@ namespace LibMeteoPL
                 case TYPE_TEMPERATURE_PERCEPTIBLE:
                 case TYPE_TEMPERATURE_PERCEPTIBLE_MAX:
                 case TYPE_TEMPERATURE_PERCEPTIBLE_MIN:
+                case TYPE_PRESSURE_HPA:
+                case TYPE_PRESSURE_MMHG:
                     return CHART_WIDTH;
 
             }
 
-
+            utils.throwException("Type not yet implemented");
             return ERR;
         }
 
@@ -135,8 +185,13 @@ namespace LibMeteoPL
                     return temperaturePercMax;
                 case TYPE_TEMPERATURE_PERCEPTIBLE_MIN:
                     return temperaturePercMin;
+                case TYPE_PRESSURE_HPA:
+                    return pressurehPa;
+                case TYPE_PRESSURE_MMHG:
+                    return pressuremmHg;
             }
 
+            utils.throwException("Type not yet implemented");
             return null;
         }
 
@@ -154,10 +209,14 @@ namespace LibMeteoPL
                 case TYPE_TEMPERATURE_PERCEPTIBLE_MAX:
                 case TYPE_TEMPERATURE_PERCEPTIBLE_MIN:
                     return temperature_precision;
+                case TYPE_PRESSURE_HPA:
+                    return pressure_precision_hPa;
+                case TYPE_PRESSURE_MMHG:
+                    return hPaTommHg(pressure_precision_hPa);
 
             }
 
-
+            utils.throwException("Type not yet implemented");
             return -1;
         }
 
@@ -168,6 +227,10 @@ namespace LibMeteoPL
         {
             readTemperatureScale(pixelsRGB);
             readTemperatureValues(pixelsRGB);
+
+            readPressureScale(pixelsRGB);
+            readPressureValues(pixelsRGB);
+
             if (useHeuristicForMissingData)
             {
                 fixMissingData();
@@ -233,6 +296,41 @@ namespace LibMeteoPL
             }
         }
 
+
+        /*
+        parse third image section
+        */
+        private void readPressureValues(int[] pixelsRGB)
+        {
+
+            for (int x = 0; x < CHART_WIDTH; x++)
+            {
+                pressurehPa[x] = NOVALUE;
+                pressuremmHg[x] = NOVALUE;
+
+                for (int y = 0; y < PRESSURE_PANEL_HEIGHT; y++)
+                {
+                    if (getPixel(pixelsRGB, WIDTH, CHART_START_COL + x, PRESSURE_ROW_START + y) == COLOR_BLACK)
+                    {
+                        if (y == 0)
+                        {
+                            break; // vertical dotted line, may be impossible to read values here
+                        }
+
+                        pressurehPa[x] = pressure_row0_hPa - pressure_precision_hPa * y;
+                        pressuremmHg[x] = hPaTommHg(pressurehPa[x]);
+                        break;
+                    }
+                }
+            }
+        }
+
+        private double hPaTommHg(double hPa)
+        {
+            return hPa * 0.75006156130;
+        }
+
+
         /*
         fill data holes by averaging valid neighbour values
         */
@@ -270,9 +368,10 @@ namespace LibMeteoPL
                 }
             }
 
-            // fix holes of temperature array
+            // fix holes of...
             for (int leftx = 0; leftx < CHART_WIDTH; leftx++)
             {
+                //  ... temperature array
                 if (temperature[leftx] == NOVALUE)
                 {
                     int rightx = leftx + 1;
@@ -286,6 +385,23 @@ namespace LibMeteoPL
                         temperature[workx] = temperature[leftx-1] + diff * (workx - leftx + 1);
                     }
                 }
+
+                //  ... pressure array
+                if (pressurehPa[leftx] == NOVALUE)
+                {
+                    int rightx = leftx + 1;
+                    while (pressurehPa[rightx] == NOVALUE)
+                    {
+                        rightx++;
+                    }
+                    double diff = (pressurehPa[rightx] - pressurehPa[leftx - 1]) / (rightx - leftx + 1);
+                    for (int workx = leftx; workx < rightx; workx++)
+                    {
+                        pressurehPa[workx] = pressurehPa[leftx - 1] + diff * (workx - leftx + 1);
+                        pressuremmHg[workx] = hPaTommHg(pressurehPa[workx]);
+                    }
+                }
+
             }
 
             // TODO fix other data arrays here
@@ -305,27 +421,27 @@ namespace LibMeteoPL
 
             for (int i = TEMPERATURE_ROW_START - DIGIT_HEIGHT; i < TEMPERATURE_ROW_END; i++)
             {
-                int x1 = read3digit(TEMPERATURE_TEXT_COL, i, pixelsRGB, BLACK);
+                int x1 = readUpTo3digit(TEMPERATURE_TEXT_COL, i, pixelsRGB, COLOR_BLACK);
                 if (x1 != ERR)
                 {
-                    start = i+4;
+                    start = i + 4;
                     temp_start = x1;
                     break;
                 }
             }
 
-            for (int i = TEMPERATURE_ROW_END ; i > TEMPERATURE_ROW_START - DIGIT_HEIGHT; i--)
+            for (int i = TEMPERATURE_ROW_END; i > TEMPERATURE_ROW_START - DIGIT_HEIGHT; i--)
             {
-                int x2 = read3digit(TEMPERATURE_TEXT_COL, i, pixelsRGB, BLACK);
+                int x2 = readUpTo3digit(TEMPERATURE_TEXT_COL, i, pixelsRGB, COLOR_BLACK);
                 if (x2 != ERR)
                 {
-                    end = i+4;
+                    end = i + 4;
                     temp_end = x2;
                     break;
                 }
             }
 
-            double tempSpan = temp_start*temp_end < 0 ? Math.Abs(temp_start + temp_end) : Math.Abs(temp_start - temp_end) ;
+            double tempSpan = temp_start * temp_end < 0 ? Math.Abs(temp_start + temp_end) : Math.Abs(temp_start - temp_end);
 
             temperature_precision = tempSpan / Math.Abs(start - end);
             temperature_row0 = temp_start + temperature_precision * (start - TEMPERATURE_ROW_START);
@@ -333,14 +449,55 @@ namespace LibMeteoPL
             int x = 0;
         }
 
-        private int read3digit(int x, int y, int[] pixelsRGB, int pixelColor)
+
+        /*
+        read scale of first image section
+        */
+        private void readPressureScale(int[] pixelsRGB)
+        {
+            int start = 0;
+            int pres_start = 0;
+            int end = 0;
+            int pres_end = 0;
+
+            for (int i = PRESSURE_ROW_START - DIGIT_HEIGHT; i < PRESSURE_ROW_END; i++)
+            {
+                int x1 = read3or4digit(PRESSURE_TEXT_COL, i, pixelsRGB, COLOR_BLACK);
+                if (x1 != ERR)
+                {
+                    start = i + 4;
+                    pres_start = x1;
+                    break;
+                }
+            }
+
+            for (int i = PRESSURE_ROW_END; i > PRESSURE_ROW_START - DIGIT_HEIGHT; i--)
+            {
+                int x2 = read3or4digit(PRESSURE_TEXT_COL, i, pixelsRGB, COLOR_BLACK);
+                if (x2 != ERR)
+                {
+                    end = i + 4;
+                    pres_end = x2;
+                    break;
+                }
+            }
+
+            double presSpan = pres_start * pres_end < 0 ? Math.Abs(pres_start + pres_end) : Math.Abs(pres_start - pres_end);
+
+            pressure_precision_hPa = presSpan / Math.Abs(start - end);
+            pressure_row0_hPa = pres_start + temperature_precision * (start - PRESSURE_ROW_START);
+
+            int x = 0;
+        }
+
+        private int readUpTo3digit(int x, int y, int[] pixelsRGB, int pixelColor)
         {
             int i = readXdigit(x, y, 3, pixelsRGB, pixelColor);
             if (i != ERR)
             {
                 return i;
             }
-            x += DIGIT_WIDTH+DIGIT_SEPARATOR;
+            x += DIGIT_WIDTH + DIGIT_SEPARATOR;
 
             i = readXdigit(x, y, 2, pixelsRGB, pixelColor);
             if (i != ERR)
@@ -356,7 +513,24 @@ namespace LibMeteoPL
             }
 
             return ERR;
+        }
 
+        private int read3or4digit(int x, int y, int[] pixelsRGB, int pixelColor)
+        {
+            int i = readXdigit(x, y, 4, pixelsRGB, pixelColor);
+            if (i != ERR)
+            {
+                return i;
+            }
+            x += DIGIT_WIDTH + DIGIT_SEPARATOR;
+
+            i = readXdigit(x, y, 3, pixelsRGB, pixelColor);
+            if (i != ERR)
+            {
+                return i;
+            }
+
+            return ERR;
         }
 
         private int readXdigit(int x, int y, int digits, int[] pixelsRGB, int pixelColor)
@@ -397,16 +571,16 @@ namespace LibMeteoPL
             for (int x = CHART_START_COL; x < CHART_START_COL + CHART_WIDTH; x++)
             {
                 if (
-                    isDigit(pixelsRGB, x, TIMESTAMP_DATE_ROW, BLACK) &&
-                    isDigit(pixelsRGB, x + 7, TIMESTAMP_DATE_ROW, BLACK) &&
-                    isDigit(pixelsRGB, x + 17, TIMESTAMP_DATE_ROW, BLACK) &&
-                    isDigit(pixelsRGB, x + 24, TIMESTAMP_DATE_ROW, BLACK)
+                    isDigit(pixelsRGB, x, TIMESTAMP_DATE_ROW, COLOR_BLACK) &&
+                    isDigit(pixelsRGB, x + 7, TIMESTAMP_DATE_ROW, COLOR_BLACK) &&
+                    isDigit(pixelsRGB, x + 17, TIMESTAMP_DATE_ROW, COLOR_BLACK) &&
+                    isDigit(pixelsRGB, x + 24, TIMESTAMP_DATE_ROW, COLOR_BLACK)
                     )
                 {
-                    day = readDigit(pixelsRGB, x + 0, TIMESTAMP_DATE_ROW, BLACK) * 10 +
-                        readDigit(pixelsRGB, x + 7, TIMESTAMP_DATE_ROW, BLACK);
-                    month = readDigit(pixelsRGB, x + 17, TIMESTAMP_DATE_ROW, BLACK) * 10 +
-                        readDigit(pixelsRGB, x + 24, TIMESTAMP_DATE_ROW, BLACK);
+                    day = readDigit(pixelsRGB, x + 0, TIMESTAMP_DATE_ROW, COLOR_BLACK) * 10 +
+                        readDigit(pixelsRGB, x + 7, TIMESTAMP_DATE_ROW, COLOR_BLACK);
+                    month = readDigit(pixelsRGB, x + 17, TIMESTAMP_DATE_ROW, COLOR_BLACK) * 10 +
+                        readDigit(pixelsRGB, x + 24, TIMESTAMP_DATE_ROW, COLOR_BLACK);
 
                     break;
 
@@ -416,12 +590,12 @@ namespace LibMeteoPL
             for (int x = CHART_START_COL; x < CHART_START_COL + CHART_WIDTH; x++)
             {
                 if (
-                    isDigit(pixelsRGB, x, TIMESTAMP_TIME_ROW, BLACK) &&
-                    isDigit(pixelsRGB, x + 7, TIMESTAMP_TIME_ROW, BLACK) 
+                    isDigit(pixelsRGB, x, TIMESTAMP_TIME_ROW, COLOR_BLACK) &&
+                    isDigit(pixelsRGB, x + 7, TIMESTAMP_TIME_ROW, COLOR_BLACK) 
                     )
                 {
-                    hour = readDigit(pixelsRGB, x , TIMESTAMP_TIME_ROW, BLACK) * 10 +
-                        readDigit(pixelsRGB, x +7, TIMESTAMP_TIME_ROW, BLACK);
+                    hour = readDigit(pixelsRGB, x , TIMESTAMP_TIME_ROW, COLOR_BLACK) * 10 +
+                        readDigit(pixelsRGB, x +7, TIMESTAMP_TIME_ROW, COLOR_BLACK);
 
                     int secPerPixel = 60 * 60 * 24 * 3 / CHART_WIDTH;
 

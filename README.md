@@ -21,8 +21,27 @@ Implemented data categories
   * Temperature min/max (light red) - **incomplete/lack of heuristic**
   * Perceptible temperature (blue line) - **incomplete/lack of heuristic**
   * Perceptible temperature min/max (light blue) - **incomplete/lack of heuristic**
+  * Dew point - **TBD**
 
-* Other sections - To Be Done
+* Section 2 - precipitation
+  * all categories **TBD**
+
+* Section 3 - atmospheric pressure
+  * Pressure in hPa
+  * Pressure in mm Hg
+
+* Section 4 - wind speed
+  * all categories **TBD**
+
+* Section 5 - wind direction
+  * all categories **TBD**
+
+* Section 5 - clouds base and visibility
+  * all categories **TBD**
+
+* Section 6 - clouds coverage and fog
+  * all categories **TBD**
+
  
 How to use
 ==========

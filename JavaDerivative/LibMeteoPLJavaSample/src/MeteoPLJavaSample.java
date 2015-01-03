@@ -22,7 +22,7 @@ public class MeteoPLJavaSample implements Utils {
 
     private void demo() throws IOException
     {
-        BufferedImage img = ImageIO.read(new File("../../samples/mgram1.png"));
+        BufferedImage img = ImageIO.read(new File("../../samples/mgram2.png"));
         int pixels[] = new int[img.getWidth()*img.getHeight()];
 
         int[] data = img.getRGB(0, 0, img.getWidth(), img.getHeight(), null, 0, img.getWidth());
@@ -30,13 +30,28 @@ public class MeteoPLJavaSample implements Utils {
 
         ModelUM modelUM = new ModelUM(data, this, true);
         double temp[] = modelUM.getSamples(modelUM.TYPE_TEMPERATURE);
+        double tempPerc[] = modelUM.getSamples(modelUM.TYPE_TEMPERATURE_PERCEPTIBLE);
+        double press[] = modelUM.getSamples(modelUM.TYPE_PRESSURE_HPA);
 
         PrintWriter writer = new PrintWriter("../../samples/mgram1javaoutput.txt", "UTF-8");
-        DecimalFormat df = new DecimalFormat("#.##");
+        DecimalFormat df = new DecimalFormat("0.00");
         for (int i=0; i<temp.length; i++)
         {
-            writer.println(df.format(temp[i]));
+            writer.print(df.format(temp[i]));
+            writer.print(";");
         }
+        writer.println();
+        for (int i=0; i<temp.length; i++)
+        {
+            writer.print(df.format(tempPerc[i]));
+            writer.print(";");
+        }
+        writer.println();
+        for (int i=0; i<temp.length; i++) {
+            writer.print(df.format(press[i]));
+            writer.print(";");
+        }
+        writer.println();
         writer.close();
 
     }

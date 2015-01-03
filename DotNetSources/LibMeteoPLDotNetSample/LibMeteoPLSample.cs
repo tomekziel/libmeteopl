@@ -18,7 +18,7 @@ namespace LibMeteoPL
 
             int[] pixels = new int[ModelUM.WIDTH * ModelUM.HEIGHT];
 
-            Bitmap img = new Bitmap("../../../../samples/mgram1.png");
+            Bitmap img = new Bitmap("../../../../samples/mgram2.png");
 
             for (int x = 0; x < img.Width; x++)
             {
@@ -32,12 +32,28 @@ namespace LibMeteoPL
             ModelUM model = new ModelUM(pixels, this, true);
 
             double[] temp = model.getSamples(ModelUM.TYPE_TEMPERATURE);
+            double[] temp_perc = model.getSamples(ModelUM.TYPE_TEMPERATURE_PERCEPTIBLE);
+            double[] pressure = model.getSamples(ModelUM.TYPE_PRESSURE_HPA);
 
             StreamWriter file2 = new StreamWriter(@"../../../../samples/mgram1dotnetoutput.txt");
-            for(int i=0; i<temp.Length; i++)
+            for (int i = 0; i < temp.Length; i++)
             {
-                file2.WriteLine(temp[i].ToString("F"));
+                file2.Write(temp[i].ToString("F"));
+                file2.Write(";");
             }
+            file2.WriteLine();
+            for (int i = 0; i < temp.Length; i++)
+            {
+                file2.Write(temp_perc[i].ToString("F"));
+                file2.Write(";");
+            }
+            file2.WriteLine();
+            for (int i = 0; i < temp.Length; i++)
+            {
+                file2.Write(pressure[i].ToString("F"));
+                file2.Write(";");
+            }
+            file2.WriteLine();
             file2.Close();
 
         }
