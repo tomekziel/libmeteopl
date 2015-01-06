@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 
 namespace LibMeteoPL
 {
@@ -31,27 +32,35 @@ namespace LibMeteoPL
         const int TIMESTAMP_DATE_ROW = 619;
         const int TIMESTAMP_TIME_ROW = 607;
         const int CHART_START_COL = 64;
-        const int CHART_WIDTH = 412;
+        public const int CHART_WIDTH = 412; // standard source width
         const int PEAKS_NUMBER = 72; // to be checked
 
         const int TEMPERATURE_ROW_START = 58;
         const int TEMPERATURE_ROW_END = 133;
         const int TEMPERATURE_TEXT_COL = 39;
-        const int TEMPERATURE_PANEL_HEIGHT = TEMPERATURE_ROW_END- TEMPERATURE_ROW_START+1;
+        public const int TEMPERATURE_PANEL_HEIGHT = TEMPERATURE_ROW_END- TEMPERATURE_ROW_START+1;
 
         const int PRESSURE_TEXT_COL = 33;
         const int PRESSURE_ROW_START = 230;
         const int PRESSURE_ROW_END = 305;
         const int PRESSURE_PANEL_HEIGHT = PRESSURE_ROW_END - PRESSURE_ROW_START + 1;
 
-        // color definitons
-        const int COLOR_BLACK = 0x000000;
-        const int COLOR_TEMPERATURE_RED = 0xff0000;
-        const int COLOR_TEMPERATURE_MINMAX_RED1 = 0xf5d2d2;
-        const int COLOR_TEMPERATURE_MINMAX_RED2 = 0xfadcdc;
+        const int DAYNIGHT_COL_START = 63;
+        const int DAYNIGHT_ROW = 29;
 
-        const int COLOR_TEMPERATURE_PERC_BLUE = 0x0000ff;
-        const int COLOR_TEMPERATURE_PERC_MINMAX_BLUE = 0xb9dcff;
+        // color definitons
+        public const int COLOR_BLACK = 0x000000;
+        public const int COLOR_WHITE = 0xFFFFFF;
+        public const int COLOR_TEMPERATURE_RED = 0xff0000;
+        public const int COLOR_TEMPERATURE_MINMAX_RED1 = 0xf5d2d2;
+        public const int COLOR_TEMPERATURE_MINMAX_RED2 = 0xfadcdc;
+        public const int COLOR_DAY = 0xffffff;
+        public const int COLOR_NIGHT = 0xe2e2e2;
+        public const int COLOR_TEMPERATURE_NEGATIVE_BG_DAY = 0x87cefa;
+        public const int COLOR_TEMPERATURE_NEGATIVE_BG_NIGHT = 0x82bee6;
+
+        public const int COLOR_TEMPERATURE_PERC_BLUE = 0x0000ff;
+        public const int COLOR_TEMPERATURE_PERC_MINMAX_BLUE = 0xb9dcff;
 
         bool useHeuristicForMissingData = false;
         public const int ERR = -1000000;
@@ -85,6 +94,8 @@ namespace LibMeteoPL
         // Section 3 - atmospheric pressure
         public const int TYPE_PRESSURE_HPA = 16;
         public const int TYPE_PRESSURE_MMHG = 17;
+        // Section X - extra data
+        public const int TYPE_DAYNIGHT = 100;
         // Other sections - TBD
 
 
@@ -97,7 +108,7 @@ namespace LibMeteoPL
         double[] temperaturePercMax = new double[CHART_WIDTH];
         double[] temperatureSurfaceMin = new double[PEAKS_NUMBER];
         double[] temperatureSurfaceMax = new double[PEAKS_NUMBER];
-        double[] temperatureDevPoint = new double[PEAKS_NUMBER];
+        double[] temperatureDewPoint = new double[PEAKS_NUMBER];
         double temperature_precision;
         double temperature_row0;
 
@@ -117,7 +128,7 @@ namespace LibMeteoPL
         double pressure_precision_hPa;
 
         // Other sections - TBD
-
+        double[] daynight = new double[CHART_WIDTH];
 
 
         // create object and parse img
@@ -138,10 +149,13 @@ namespace LibMeteoPL
             }
 
             parsePixels(pixelsRGB);
-
         }
 
-
+        public long getTimestamp(int px)
+        {
+            double part = px*1.0d / CHART_WIDTH;
+            return timestamp + (int)(part * (CHART_WIDTH / 168.0) * 24 * 60 * 60 * 1000);
+        }
 
         /*
         how many samples (data points) are present in given category
@@ -189,6 +203,8 @@ namespace LibMeteoPL
                     return pressurehPa;
                 case TYPE_PRESSURE_MMHG:
                     return pressuremmHg;
+                case TYPE_DAYNIGHT:
+                    return daynight;
             }
 
             utils.throwException("Type not yet implemented");
@@ -200,24 +216,7 @@ namespace LibMeteoPL
         */
         public double getPrecision(int type)
         {
-            switch (type)
-            {
-                case TYPE_TEMPERATURE:
-                case TYPE_TEMPERATURE_MAX:
-                case TYPE_TEMPERATURE_MIN:
-                case TYPE_TEMPERATURE_PERCEPTIBLE:
-                case TYPE_TEMPERATURE_PERCEPTIBLE_MAX:
-                case TYPE_TEMPERATURE_PERCEPTIBLE_MIN:
-                    return temperature_precision;
-                case TYPE_PRESSURE_HPA:
-                    return pressure_precision_hPa;
-                case TYPE_PRESSURE_MMHG:
-                    return hPaTommHg(pressure_precision_hPa);
-
-            }
-
-            utils.throwException("Type not yet implemented");
-            return -1;
+            return getSamples(type).Length;
         }
 
         /*
@@ -230,6 +229,8 @@ namespace LibMeteoPL
 
             readPressureScale(pixelsRGB);
             readPressureValues(pixelsRGB);
+
+            readOtherValues(pixelsRGB);
 
             if (useHeuristicForMissingData)
             {
@@ -287,11 +288,11 @@ namespace LibMeteoPL
                 }
                 if (minT != NOVALUE)
                 {
-                    temperature[x] = temperature_row0 - temperature_precision * (maxT + minT) / 2;
+                    temperature[x] = temperature_row0 - temperature_precision * (maxT+ maxT + minT) / 3;
                 }
                 if (minP != NOVALUE)
                 {
-                    temperaturePerc[x] = temperature_row0 - temperature_precision * (maxP + minP) / 2;
+                    temperaturePerc[x] = temperature_row0 - temperature_precision * (maxP+ maxP + minP) / 3;
                 }
             }
         }
@@ -332,13 +333,25 @@ namespace LibMeteoPL
 
 
         /*
+        parse first image section
+        */
+        private void readOtherValues(int[] pixelsRGB)
+        {
+            for (int x = 0; x < CHART_WIDTH; x++)
+            {
+                daynight[x] = getPixel(pixelsRGB, WIDTH, DAYNIGHT_COL_START + x, DAYNIGHT_ROW) == COLOR_WHITE ? 0f : 1f;
+            }
+        }
+
+
+        /*
         fill data holes by averaging valid neighbour values
         */
         private void fixMissingData()
         {
-            // fix left edge of temperature array
             for (int x = 0; x < CHART_WIDTH; x++)
             {
+                // fix left edge of temperature array
                 if (temperature[x] != NOVALUE)
                 {
                     if (x > 0)
@@ -352,16 +365,81 @@ namespace LibMeteoPL
                 }
             }
 
+            for (int x = 0; x < CHART_WIDTH; x++)
+            {
+                // fix left edge of temperature perc array
+                if (temperaturePerc[x] != NOVALUE)
+                {
+                    if (x > 0)
+                    {
+                        for (int fixx = 0; fixx < x; fixx++)
+                        {
+                            temperaturePerc[fixx] = temperaturePerc[x];
+                        }
+                    }
+                    break;
+                }
+            }
+
+            for (int x = 0; x < CHART_WIDTH; x++)
+            {
+                // fix left edge of temperature perceptible
+                if (temperaturePerc[x] != NOVALUE)
+                {
+                    if (x > 0)
+                    {
+                        for (int fixx = 0; fixx < x; fixx++)
+                        {
+                            temperaturePerc[fixx] = temperaturePerc[x];
+                        }
+                    }
+                    break;
+                }
+
+            }
+
             // fix right edge of temperature array
-            for (int x = CHART_WIDTH-1; x >= 0; x--)
+            for (int x = CHART_WIDTH - 1; x >= 0; x--)
             {
                 if (temperature[x] != NOVALUE)
                 {
                     if (x < CHART_WIDTH - 1)
                     {
-                        for (int fixx = CHART_WIDTH-1; fixx > x; fixx--)
+                        for (int fixx = CHART_WIDTH - 1; fixx > x; fixx--)
                         {
                             temperature[fixx] = temperature[x];
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // fix right edge of temperature perc array
+            for (int x = CHART_WIDTH - 1; x >= 0; x--)
+            {
+                if (temperaturePerc[x] != NOVALUE)
+                {
+                    if (x < CHART_WIDTH - 1)
+                    {
+                        for (int fixx = CHART_WIDTH - 1; fixx > x; fixx--)
+                        {
+                            temperaturePerc[fixx] = temperaturePerc[x];
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // fix right edge of temperature perceptible
+            for (int x = CHART_WIDTH - 1; x >= 0; x--)
+            {
+                if (temperaturePerc[x] != NOVALUE)
+                {
+                    if (x < CHART_WIDTH - 1)
+                    {
+                        for (int fixx = CHART_WIDTH - 1; fixx > x; fixx--)
+                        {
+                            temperaturePerc[fixx] = temperaturePerc[x];
                         }
                     }
                     break;
@@ -375,14 +453,29 @@ namespace LibMeteoPL
                 if (temperature[leftx] == NOVALUE)
                 {
                     int rightx = leftx + 1;
-                    while(temperature[rightx] == NOVALUE)
+                    while (temperature[rightx] == NOVALUE)
                     {
                         rightx++;
                     }
-                    double diff = (temperature[rightx] - temperature[leftx-1]) / (rightx - leftx + 1);
+                    double diff = (temperature[rightx] - temperature[leftx - 1]) / (rightx - leftx + 1);
                     for (int workx = leftx; workx < rightx; workx++)
                     {
-                        temperature[workx] = temperature[leftx-1] + diff * (workx - leftx + 1);
+                        temperature[workx] = temperature[leftx - 1] + diff * (workx - leftx + 1);
+                    }
+                }
+
+                //  ... temperature oerc array
+                if (temperaturePerc[leftx] == NOVALUE)
+                {
+                    int rightx = leftx + 1;
+                    while (temperaturePerc[rightx] == NOVALUE)
+                    {
+                        rightx++;
+                    }
+                    double diff = (temperaturePerc[rightx] - temperaturePerc[leftx - 1]) / (rightx - leftx + 1);
+                    for (int workx = leftx; workx < rightx; workx++)
+                    {
+                        temperaturePerc[workx] = temperaturePerc[leftx - 1] + diff * (workx - leftx + 1);
                     }
                 }
 
@@ -402,6 +495,27 @@ namespace LibMeteoPL
                     }
                 }
 
+            }
+
+            // fix minmax temperatures by sticking to main
+            for (int x = 0; x< CHART_WIDTH; x++)
+            {
+                if (temperaturePercMax[x] == -NOVALUE || temperaturePercMax[x] == NOVALUE)
+                {
+                    temperaturePercMax[x] = temperaturePerc[x];
+                }
+                if (temperaturePercMin[x] == -NOVALUE || temperaturePercMin[x] == NOVALUE)
+                {
+                    temperaturePercMin[x] = temperaturePerc[x];
+                }
+                if (temperatureMax[x] == -NOVALUE || temperatureMax[x] == NOVALUE)
+                {
+                    temperatureMax[x] = temperature[x];
+                }
+                if (temperatureMin[x] == -NOVALUE || temperatureMin[x] == NOVALUE)
+                {
+                    temperatureMin[x] = temperature[x];
+                }
             }
 
             // TODO fix other data arrays here
