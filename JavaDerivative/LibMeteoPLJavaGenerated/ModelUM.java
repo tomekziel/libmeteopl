@@ -18,26 +18,35 @@ public class ModelUM
         final int TIMESTAMP_DATE_ROW = 619;
         final int TIMESTAMP_TIME_ROW = 607;
         final int CHART_START_COL = 64;
-        final int CHART_WIDTH = 412;
+        public final int CHART_WIDTH = 412; // standard source width
+        final int PEAKS_NUMBER = 72; // to be checked
 
         final int TEMPERATURE_ROW_START = 58;
         final int TEMPERATURE_ROW_END = 133;
         final int TEMPERATURE_TEXT_COL = 39;
-        final int TEMPERATURE_PANEL_HEIGHT = TEMPERATURE_ROW_END- TEMPERATURE_ROW_START+1;
+        public final int TEMPERATURE_PANEL_HEIGHT = TEMPERATURE_ROW_END- TEMPERATURE_ROW_START+1;
 
         final int PRESSURE_TEXT_COL = 33;
         final int PRESSURE_ROW_START = 230;
         final int PRESSURE_ROW_END = 305;
         final int PRESSURE_PANEL_HEIGHT = PRESSURE_ROW_END - PRESSURE_ROW_START + 1;
 
-        // color definitons
-        final int COLOR_BLACK = 0x000000;
-        final int COLOR_TEMPERATURE_RED = 0xff0000;
-        final int COLOR_TEMPERATURE_MINMAX_RED1 = 0xf5d2d2;
-        final int COLOR_TEMPERATURE_MINMAX_RED2 = 0xfadcdc;
+        final int DAYNIGHT_COL_START = 63;
+        final int DAYNIGHT_ROW = 29;
 
-        final int COLOR_TEMPERATURE_PERC_BLUE = 0x0000ff;
-        final int COLOR_TEMPERATURE_PERC_MINMAX_BLUE = 0xb9dcff;
+        // color definitons
+        public final int COLOR_BLACK = 0x000000;
+        public final int COLOR_WHITE = 0xFFFFFF;
+        public final int COLOR_TEMPERATURE_RED = 0xff0000;
+        public final int COLOR_TEMPERATURE_MINMAX_RED1 = 0xf5d2d2;
+        public final int COLOR_TEMPERATURE_MINMAX_RED2 = 0xfadcdc;
+        public final int COLOR_DAY = 0xffffff;
+        public final int COLOR_NIGHT = 0xe2e2e2;
+        public final int COLOR_TEMPERATURE_NEGATIVE_BG_DAY = 0x87cefa;
+        public final int COLOR_TEMPERATURE_NEGATIVE_BG_NIGHT = 0x82bee6;
+
+        public final int COLOR_TEMPERATURE_PERC_BLUE = 0x0000ff;
+        public final int COLOR_TEMPERATURE_PERC_MINMAX_BLUE = 0xb9dcff;
 
         boolean useHeuristicForMissingData = false;
         public final int ERR = -1000000;
@@ -47,20 +56,65 @@ public class ModelUM
         // parsed data
         long timestamp = 0;
 
-        // image section 1 - temperatures
+
+
+        // consider changing to ENUM, if all target languages support it
+        // Section 1 - temperatures
+        public final int TYPE_TEMPERATURE = 0;
+        public final int TYPE_TEMPERATURE_MIN = 1;
+        public final int TYPE_TEMPERATURE_MAX = 2;
+        public final int TYPE_TEMPERATURE_PERCEPTIBLE = 3;
+        public final int TYPE_TEMPERATURE_PERCEPTIBLE_MIN = 4;
+        public final int TYPE_TEMPERATURE_PERCEPTIBLE_MAX = 5;
+        public final int TYPE_SURFACE_TEMPERATURE_MIN = 6;
+        public final int TYPE_SURFACE_TEMPERATURE_MAX = 7;
+        public final int TYPE_DEWPOINT_TEMPERATURE = 8;
+        // Section 2 - precipitation
+        public final int TYPE_HUMIDITY = 9;
+        public final int TYPE_RAIN_AVERAGE = 10;
+        public final int TYPE_RAIN_MAX = 11;
+        public final int TYPE_SNOW_AVERAGE = 12;
+        public final int TYPE_SNOW_MAX = 13;
+        public final int TYPE_PRECIPITIATION_ABOVE_SCALE = 14;
+        public final int TYPE_CONVECTIVE_PRECIPITIATION = 15;
+        // Section 3 - atmospheric pressure
+        public final int TYPE_PRESSURE_HPA = 16;
+        public final int TYPE_PRESSURE_MMHG = 17;
+        // Section X - extra data
+        public final int TYPE_DAYNIGHT = 100;
+        // Other sections - TBD
+
+
+        // Section 1 - temperatures
         double[] temperature = new double[CHART_WIDTH];
-        double[] temperatureMax = new double[CHART_WIDTH];
         double[] temperatureMin = new double[CHART_WIDTH];
+        double[] temperatureMax = new double[CHART_WIDTH];
         double[] temperaturePerc = new double[CHART_WIDTH];
-        double[] temperaturePercMax = new double[CHART_WIDTH];
         double[] temperaturePercMin = new double[CHART_WIDTH];
+        double[] temperaturePercMax = new double[CHART_WIDTH];
+        double[] temperatureSurfaceMin = new double[PEAKS_NUMBER];
+        double[] temperatureSurfaceMax = new double[PEAKS_NUMBER];
+        double[] temperatureDewPoint = new double[PEAKS_NUMBER];
         double temperature_precision;
         double temperature_row0;
 
-        double pressure_row0_hPa;
-        double pressure_precision_hPa;
+        // Section 2 - precipitation
+        double[] humidity = new double[CHART_WIDTH];
+        double[] rainAvg = new double[PEAKS_NUMBER];
+        double[] rainMax = new double[PEAKS_NUMBER];
+        double[] snowAvg = new double[PEAKS_NUMBER];
+        double[] snowMax = new double[PEAKS_NUMBER];
+        boolean[] percAboveScale = new boolean[PEAKS_NUMBER];
+        boolean[] convectivePerc = new boolean[PEAKS_NUMBER];
+
+        // Section 3 - atmospheric pressure
         double[] pressurehPa = new double[CHART_WIDTH];
         double[] pressuremmHg = new double[CHART_WIDTH];
+        double pressure_row0_hPa;
+        double pressure_precision_hPa;
+
+        // Other sections - TBD
+        double[] daynight = new double[CHART_WIDTH];
 
 
         // create object and parse img
@@ -81,18 +135,13 @@ public class ModelUM
             }
 
             parsePixels(pixelsRGB);
-
         }
 
-        // consider changing to ENUM, if all target languages support it
-        public final int TYPE_TEMPERATURE = 0;
-        public final int TYPE_TEMPERATURE_MAX = 1;
-        public final int TYPE_TEMPERATURE_MIN = 2;
-        public final int TYPE_TEMPERATURE_PERCEPTIBLE = 3;
-        public final int TYPE_TEMPERATURE_PERCEPTIBLE_MAX = 4;
-        public final int TYPE_TEMPERATURE_PERCEPTIBLE_MIN = 5;
-        public final int TYPE_PRESSURE_HPA = 6;
-        public final int TYPE_PRESSURE_MMHG = 7;
+        public long getTimestamp(int px)
+        {
+            double part = px*1.0d / CHART_WIDTH;
+            return timestamp + (int)(part * (CHART_WIDTH / 168.0) * 24 * 60 * 60 * 1000);
+        }
 
         /*
         how many samples (data points) are present in given category
@@ -113,7 +162,7 @@ public class ModelUM
 
             }
 
-
+            utils.throwException("Type not yet implemented");
             return ERR;
         }
 
@@ -140,8 +189,11 @@ public class ModelUM
                     return pressurehPa;
                 case TYPE_PRESSURE_MMHG:
                     return pressuremmHg;
+                case TYPE_DAYNIGHT:
+                    return daynight;
             }
 
+            utils.throwException("Type not yet implemented");
             return null;
         }
 
@@ -150,24 +202,7 @@ public class ModelUM
         */
         public double getPrecision(int type)
         {
-            switch (type)
-            {
-                case TYPE_TEMPERATURE:
-                case TYPE_TEMPERATURE_MAX:
-                case TYPE_TEMPERATURE_MIN:
-                case TYPE_TEMPERATURE_PERCEPTIBLE:
-                case TYPE_TEMPERATURE_PERCEPTIBLE_MAX:
-                case TYPE_TEMPERATURE_PERCEPTIBLE_MIN:
-                    return temperature_precision;
-                case TYPE_PRESSURE_HPA:
-                    return pressure_precision_hPa;
-                case TYPE_PRESSURE_MMHG:
-                    return hPaTommHg(pressure_precision_hPa);
-
-            }
-
-
-            return -1;
+            return getSamples(type).length;
         }
 
         /*
@@ -180,6 +215,8 @@ public class ModelUM
 
             readPressureScale(pixelsRGB);
             readPressureValues(pixelsRGB);
+
+            readOtherValues(pixelsRGB);
 
             if (useHeuristicForMissingData)
             {
@@ -237,11 +274,11 @@ public class ModelUM
                 }
                 if (minT != NOVALUE)
                 {
-                    temperature[x] = temperature_row0 - temperature_precision * (maxT + minT) / 2;
+                    temperature[x] = temperature_row0 - temperature_precision * (maxT+ maxT + minT) / 3;
                 }
                 if (minP != NOVALUE)
                 {
-                    temperaturePerc[x] = temperature_row0 - temperature_precision * (maxP + minP) / 2;
+                    temperaturePerc[x] = temperature_row0 - temperature_precision * (maxP+ maxP + minP) / 3;
                 }
             }
         }
@@ -282,13 +319,25 @@ public class ModelUM
 
 
         /*
+        parse first image section
+        */
+        private void readOtherValues(int[] pixelsRGB)
+        {
+            for (int x = 0; x < CHART_WIDTH; x++)
+            {
+                daynight[x] = getPixel(pixelsRGB, WIDTH, DAYNIGHT_COL_START + x, DAYNIGHT_ROW) == COLOR_WHITE ? 0f : 1f;
+            }
+        }
+
+
+        /*
         fill data holes by averaging valid neighbour values
         */
         private void fixMissingData()
         {
-            // fix left edge of temperature array
             for (int x = 0; x < CHART_WIDTH; x++)
             {
+                // fix left edge of temperature array
                 if (temperature[x] != NOVALUE)
                 {
                     if (x > 0)
@@ -302,16 +351,81 @@ public class ModelUM
                 }
             }
 
+            for (int x = 0; x < CHART_WIDTH; x++)
+            {
+                // fix left edge of temperature perc array
+                if (temperaturePerc[x] != NOVALUE)
+                {
+                    if (x > 0)
+                    {
+                        for (int fixx = 0; fixx < x; fixx++)
+                        {
+                            temperaturePerc[fixx] = temperaturePerc[x];
+                        }
+                    }
+                    break;
+                }
+            }
+
+            for (int x = 0; x < CHART_WIDTH; x++)
+            {
+                // fix left edge of temperature perceptible
+                if (temperaturePerc[x] != NOVALUE)
+                {
+                    if (x > 0)
+                    {
+                        for (int fixx = 0; fixx < x; fixx++)
+                        {
+                            temperaturePerc[fixx] = temperaturePerc[x];
+                        }
+                    }
+                    break;
+                }
+
+            }
+
             // fix right edge of temperature array
-            for (int x = CHART_WIDTH-1; x >= 0; x--)
+            for (int x = CHART_WIDTH - 1; x >= 0; x--)
             {
                 if (temperature[x] != NOVALUE)
                 {
                     if (x < CHART_WIDTH - 1)
                     {
-                        for (int fixx = CHART_WIDTH-1; fixx > x; fixx--)
+                        for (int fixx = CHART_WIDTH - 1; fixx > x; fixx--)
                         {
                             temperature[fixx] = temperature[x];
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // fix right edge of temperature perc array
+            for (int x = CHART_WIDTH - 1; x >= 0; x--)
+            {
+                if (temperaturePerc[x] != NOVALUE)
+                {
+                    if (x < CHART_WIDTH - 1)
+                    {
+                        for (int fixx = CHART_WIDTH - 1; fixx > x; fixx--)
+                        {
+                            temperaturePerc[fixx] = temperaturePerc[x];
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // fix right edge of temperature perceptible
+            for (int x = CHART_WIDTH - 1; x >= 0; x--)
+            {
+                if (temperaturePerc[x] != NOVALUE)
+                {
+                    if (x < CHART_WIDTH - 1)
+                    {
+                        for (int fixx = CHART_WIDTH - 1; fixx > x; fixx--)
+                        {
+                            temperaturePerc[fixx] = temperaturePerc[x];
                         }
                     }
                     break;
@@ -325,14 +439,29 @@ public class ModelUM
                 if (temperature[leftx] == NOVALUE)
                 {
                     int rightx = leftx + 1;
-                    while(temperature[rightx] == NOVALUE)
+                    while (temperature[rightx] == NOVALUE)
                     {
                         rightx++;
                     }
-                    double diff = (temperature[rightx] - temperature[leftx-1]) / (rightx - leftx + 1);
+                    double diff = (temperature[rightx] - temperature[leftx - 1]) / (rightx - leftx + 1);
                     for (int workx = leftx; workx < rightx; workx++)
                     {
-                        temperature[workx] = temperature[leftx-1] + diff * (workx - leftx + 1);
+                        temperature[workx] = temperature[leftx - 1] + diff * (workx - leftx + 1);
+                    }
+                }
+
+                //  ... temperature oerc array
+                if (temperaturePerc[leftx] == NOVALUE)
+                {
+                    int rightx = leftx + 1;
+                    while (temperaturePerc[rightx] == NOVALUE)
+                    {
+                        rightx++;
+                    }
+                    double diff = (temperaturePerc[rightx] - temperaturePerc[leftx - 1]) / (rightx - leftx + 1);
+                    for (int workx = leftx; workx < rightx; workx++)
+                    {
+                        temperaturePerc[workx] = temperaturePerc[leftx - 1] + diff * (workx - leftx + 1);
                     }
                 }
 
@@ -352,6 +481,27 @@ public class ModelUM
                     }
                 }
 
+            }
+
+            // fix minmax temperatures by sticking to main
+            for (int x = 0; x< CHART_WIDTH; x++)
+            {
+                if (temperaturePercMax[x] == -NOVALUE || temperaturePercMax[x] == NOVALUE)
+                {
+                    temperaturePercMax[x] = temperaturePerc[x];
+                }
+                if (temperaturePercMin[x] == -NOVALUE || temperaturePercMin[x] == NOVALUE)
+                {
+                    temperaturePercMin[x] = temperaturePerc[x];
+                }
+                if (temperatureMax[x] == -NOVALUE || temperatureMax[x] == NOVALUE)
+                {
+                    temperatureMax[x] = temperature[x];
+                }
+                if (temperatureMin[x] == -NOVALUE || temperatureMin[x] == NOVALUE)
+                {
+                    temperatureMin[x] = temperature[x];
+                }
             }
 
             // TODO fix other data arrays here
