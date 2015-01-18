@@ -29,7 +29,7 @@ namespace LibMeteoPL
                 }
             }
 
-            ModelUM model = new ModelUM(pixels, this, true);
+            ModelUM model = new ModelUM(pixels, this);
 
             double[] temp = model.getSamples(ModelUM.TYPE_TEMPERATURE);
             double[] temp_perc = model.getSamples(ModelUM.TYPE_TEMPERATURE_PERCEPTIBLE);

@@ -62,7 +62,8 @@ namespace LibMeteoPL
         public const int COLOR_TEMPERATURE_PERC_BLUE = 0x0000ff;
         public const int COLOR_TEMPERATURE_PERC_MINMAX_BLUE = 0xb9dcff;
 
-        bool useHeuristicForMissingData = false;
+        public const int COLOR_PRESSURE_ALMOST_BLACK = 0x141414;
+
         public const int ERR = -1000000;
 
         public const int NOVALUE = 1048576; // 2^20 to fit int and double nicely
@@ -132,10 +133,9 @@ namespace LibMeteoPL
 
 
         // create object and parse img
-        public ModelUM(int[] pixelsRGB, Utils utils, bool useHeuristicForMissingData)
+        public ModelUM(int[] pixelsRGB, Utils utils)
         {
             this.utils = utils;
-            this.useHeuristicForMissingData = useHeuristicForMissingData;
 
             if (pixelsRGB.Length != WIDTH * HEIGHT)
             {
@@ -226,16 +226,14 @@ namespace LibMeteoPL
         {
             readTemperatureScale(pixelsRGB);
             readTemperatureValues(pixelsRGB);
+            fixTemperatureData();
 
             readPressureScale(pixelsRGB);
             readPressureValues(pixelsRGB);
+            fixPressureData();
 
             readOtherValues(pixelsRGB);
 
-            if (useHeuristicForMissingData)
-            {
-                fixMissingData();
-            }
             readDate(pixelsRGB);
         }
 
@@ -306,24 +304,51 @@ namespace LibMeteoPL
 
             for (int x = 0; x < CHART_WIDTH; x++)
             {
+                bool nextx = false;
+
                 pressurehPa[x] = NOVALUE;
                 pressuremmHg[x] = NOVALUE;
 
-                for (int y = 0; y < PRESSURE_PANEL_HEIGHT; y++)
-                {
-                    if (getPixel(pixelsRGB, WIDTH, CHART_START_COL + x, PRESSURE_ROW_START + y) == COLOR_BLACK)
+                // intentionally skip columns with grid
+                if (getPixel(pixelsRGB, WIDTH, CHART_START_COL + x, PRESSURE_ROW_START) != COLOR_BLACK)
+                { 
+                    for (int yTop = 0; yTop < PRESSURE_PANEL_HEIGHT && nextx == false; yTop++)
                     {
-                        if (y == 0)
+                        if (getPixel(pixelsRGB, WIDTH, CHART_START_COL + x, PRESSURE_ROW_START + yTop) == COLOR_BLACK ||
+                            getPixel(pixelsRGB, WIDTH, CHART_START_COL + x, PRESSURE_ROW_START + yTop) == COLOR_PRESSURE_ALMOST_BLACK)
                         {
-                            break; // vertical dotted line, may be impossible to read values here
-                        }
 
-                        pressurehPa[x] = pressure_row0_hPa - pressure_precision_hPa * y;
-                        pressuremmHg[x] = hPaTommHg(pressurehPa[x]);
-                        break;
+                            for (int yBottom = PRESSURE_PANEL_HEIGHT-1; yBottom >= 0 && nextx == false; yBottom--)
+                            {
+                                if (getPixel(pixelsRGB, WIDTH, CHART_START_COL + x, PRESSURE_ROW_START + yBottom) == COLOR_BLACK ||
+                                    getPixel(pixelsRGB, WIDTH, CHART_START_COL + x, PRESSURE_ROW_START + yBottom) == COLOR_PRESSURE_ALMOST_BLACK)
+                                {
+                                    if (yBottom-yTop < 6)
+                                    {
+                                        pressurehPa[x] = pressure_row0_hPa - pressure_precision_hPa * yTop;
+                                        pressuremmHg[x] = hPaTommHg(pressurehPa[x]);
+                                    }
+                                    nextx = true;
+                                }
+                            }
+
+                        }
                     }
                 }
             }
+
+            /*
+            for (int x = 0; x < CHART_WIDTH-2; x++)
+            {
+                // fix left edge of temperature array
+                if (pressurehPa[x] != NOVALUE && pressurehPa[x+1] == NOVALUE && pressurehPa[x+2] != NOVALUE)
+                {
+                    pressurehPa[x+1] = (pressurehPa[x]+ pressurehPa[x+2])/2;
+                    pressuremmHg[x+1] = hPaTommHg(pressurehPa[x+1]);
+                }
+            }
+            */
+
         }
 
         private double hPaTommHg(double hPa)
@@ -347,7 +372,7 @@ namespace LibMeteoPL
         /*
         fill data holes by averaging valid neighbour values
         */
-        private void fixMissingData()
+        private void fixTemperatureData()
         {
             for (int x = 0; x < CHART_WIDTH; x++)
             {
@@ -479,21 +504,6 @@ namespace LibMeteoPL
                     }
                 }
 
-                //  ... pressure array
-                if (pressurehPa[leftx] == NOVALUE)
-                {
-                    int rightx = leftx + 1;
-                    while (pressurehPa[rightx] == NOVALUE)
-                    {
-                        rightx++;
-                    }
-                    double diff = (pressurehPa[rightx] - pressurehPa[leftx - 1]) / (rightx - leftx + 1);
-                    for (int workx = leftx; workx < rightx; workx++)
-                    {
-                        pressurehPa[workx] = pressurehPa[leftx - 1] + diff * (workx - leftx + 1);
-                        pressuremmHg[workx] = hPaTommHg(pressurehPa[workx]);
-                    }
-                }
 
             }
 
@@ -520,6 +530,67 @@ namespace LibMeteoPL
 
             // TODO fix other data arrays here
 
+        }
+
+        /*
+        fill data holes by averaging valid neighbour values
+        */
+        private void fixPressureData()
+        {
+
+            for (int x = 0; x < CHART_WIDTH; x++)
+            {
+                // fix left edge of pressure array
+                if (pressurehPa[x] != NOVALUE)
+                {
+                    if (x > 0)
+                    {
+                        for (int fixx = 0; fixx < x; fixx++)
+                        {
+                            pressurehPa[fixx] = pressurehPa[x];
+                            pressuremmHg[fixx] = hPaTommHg(pressurehPa[x]);
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // fix right edge of pressure array
+            for (int x = CHART_WIDTH - 1; x >= 0; x--)
+            {
+                if (pressurehPa[x] != NOVALUE)
+                {
+                    if (x < CHART_WIDTH - 1)
+                    {
+                        for (int fixx = CHART_WIDTH - 1; fixx > x; fixx--)
+                        {
+                            pressurehPa[fixx] = pressurehPa[x];
+                            pressuremmHg[fixx] = hPaTommHg(pressurehPa[x]);
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // fix holes of...
+            for (int leftx = 0; leftx < CHART_WIDTH; leftx++)
+            {
+                //  ... pressure array
+                if (pressurehPa[leftx] == NOVALUE)
+                {
+                    int rightx = leftx + 1;
+                    while (pressurehPa[rightx] == NOVALUE)
+                    {
+                        rightx++;
+                    }
+                    double diff = (pressurehPa[rightx] - pressurehPa[leftx - 1]) / (rightx - leftx + 1);
+                    for (int workx = leftx; workx < rightx; workx++)
+                    {
+                        pressurehPa[workx] = pressurehPa[leftx - 1] + diff * (workx - leftx + 1);
+                        pressuremmHg[workx] = hPaTommHg(pressurehPa[workx]);
+                    }
+                }
+            }
         }
 
 
