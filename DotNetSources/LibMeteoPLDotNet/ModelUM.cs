@@ -45,6 +45,11 @@ namespace LibMeteoPL
         const int PRESSURE_ROW_END = 305;
         const int PRESSURE_PANEL_HEIGHT = PRESSURE_ROW_END - PRESSURE_ROW_START + 1;
 
+        const int WIND_TEXT_COL = 45;
+        const int WIND_ROW_START = 316;
+        const int WIND_ROW_END = 391;
+        const int WIND_PANEL_HEIGHT = WIND_ROW_END - WIND_ROW_START + 1;
+
         const int DAYNIGHT_COL_START = 63;
         const int DAYNIGHT_ROW = 29;
 
@@ -95,6 +100,12 @@ namespace LibMeteoPL
         // Section 3 - atmospheric pressure
         public const int TYPE_PRESSURE_HPA = 16;
         public const int TYPE_PRESSURE_MMHG = 17;
+        // Section 4 - atmospheric pressure
+        public const int TYPE_WIND_MS = 18;
+        public const int TYPE_WIND_KMH = 19;
+        public const int TYPE_WIND_GUST_MS = 20;
+        public const int TYPE_WIND_GUST_KMH = 21;
+        public const int TYPE_WIND_GUST_ABOVESCALE = 22;
         // Section X - extra data
         public const int TYPE_DAYNIGHT = 100;
         // Other sections - TBD
@@ -127,6 +138,15 @@ namespace LibMeteoPL
         double[] pressuremmHg = new double[CHART_WIDTH];
         double pressure_row0_hPa;
         double pressure_precision_hPa;
+
+        // Section 4 - wind
+        double[] windMs = new double[CHART_WIDTH];
+        double[] windGutsMs = new double[CHART_WIDTH];
+        double[] windKmh = new double[CHART_WIDTH];
+        double[] windGutsKmh = new double[CHART_WIDTH];
+        bool[] windGutsAboveScale = new bool[CHART_WIDTH];
+        double wind_row0_ms;
+        double wind_precision_ms;
 
         // Other sections - TBD
         double[] daynight = new double[CHART_WIDTH];
@@ -231,6 +251,8 @@ namespace LibMeteoPL
             readPressureScale(pixelsRGB);
             readPressureValues(pixelsRGB);
             fixPressureData();
+
+            readWindScale(pixelsRGB);
 
             readOtherValues(pixelsRGB);
 
@@ -675,6 +697,47 @@ namespace LibMeteoPL
             int x = 0;
         }
 
+
+
+        /*
+        read scale of first image section
+        */
+        private void readWindScale(int[] pixelsRGB)
+        {
+            int start = 0;
+            int wind_start = 0;
+            int end = 0;
+            int wind_end = 0;
+
+            for (int i = WIND_ROW_START - DIGIT_HEIGHT; i < WIND_ROW_END; i++)
+            {
+                int x1 = readUpTo2digit(WIND_TEXT_COL, i, pixelsRGB, COLOR_BLACK);
+                if (x1 != ERR)
+                {
+                    start = i + 4;
+                    wind_start = x1;
+                    break;
+                }
+            }
+
+            for (int i = WIND_ROW_END; i > WIND_ROW_START - DIGIT_HEIGHT; i--)
+            {
+                int x2 = readUpTo2digit(WIND_TEXT_COL, i, pixelsRGB, COLOR_BLACK);
+                if (x2 != ERR)
+                {
+                    end = i + 4;
+                    wind_end = x2;
+                    break;
+                }
+            }
+
+            double windSpan = wind_start * wind_end < 0 ? Math.Abs(wind_start + wind_end) : Math.Abs(wind_start - wind_end);
+
+            wind_precision_ms = windSpan / Math.Abs(start - end);
+            wind_row0_ms = wind_start + wind_precision_ms * (start - WIND_ROW_START);
+
+        }
+
         private int readUpTo3digit(int x, int y, int[] pixelsRGB, int pixelColor)
         {
             int i = readXdigit(x, y, 3, pixelsRGB, pixelColor);
@@ -685,6 +748,25 @@ namespace LibMeteoPL
             x += DIGIT_WIDTH + DIGIT_SEPARATOR;
 
             i = readXdigit(x, y, 2, pixelsRGB, pixelColor);
+            if (i != ERR)
+            {
+                return i;
+            }
+            x += DIGIT_WIDTH + DIGIT_SEPARATOR;
+
+            i = readXdigit(x, y, 1, pixelsRGB, pixelColor);
+            if (i != ERR)
+            {
+                return i;
+            }
+
+            return ERR;
+        }
+
+
+        private int readUpTo2digit(int x, int y, int[] pixelsRGB, int pixelColor)
+        {
+            int i = readXdigit(x, y, 2, pixelsRGB, pixelColor);
             if (i != ERR)
             {
                 return i;
